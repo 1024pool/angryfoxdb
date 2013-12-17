@@ -9,14 +9,15 @@ import (
 	"runtime"
 
 	"github.com/angryfoxsu/levigo"
+	conf "github.com/angryfoxsu/goconfig"
 )
 
 var DB *levigo.DB
-var DefaultReadOptions = levigo.NewReadOptions()
-var DefaultWriteOptions = levigo.NewWriteOptions()
+var DefaultReadOptions   = levigo.NewReadOptions()
+var DefaultWriteOptions  = levigo.NewWriteOptions()
 var ReadWithoutCacheFill = levigo.NewReadOptions()
 
-func openDB() {
+func openDB(level_data string) {
 	opts := levigo.NewOptions()
 	cache := levigo.NewLRUCache(128 * 1024 * 1024) // 128MB cache
 	opts.SetCache(cache)
@@ -25,7 +26,7 @@ func openDB() {
 	opts.SetCreateIfMissing(true)
 
 	var err error
-	DB, err = levigo.Open("db", opts)
+	DB, err = levigo.Open(level_data, opts)
 	maybeFatal(err)
 }
 
@@ -37,12 +38,30 @@ func maybeFatal(err error) {
 }
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	openDB()
+	c, err := conf.LoadConfigFile("conf/default.ini")
+	if err != nil {
+		maybeFatal(err)
+	}
+
+	// GetValue
+	value, _ := c.GetValue("DEFAULT", "flag") // return "Let's use GoConfig!!!"
+	if value != "1" {
+		log.Printf("\nExpect: %s\nMissing: %s\n", "config!!!", value)
+	}
+	server, _     := c.GetValue("DEFAULT", "server")
+	port, _       := c.GetValue("DEFAULT", "port")
+	level_data, _ := c.GetValue("DEFAULT", "level_data")
+	if len(server) < 3 || len(port) < 3 || len(level_data) < 3 {
+		log.Printf("\nExpect: %s\nServer MissConfig Port MissConfig: %s\n", server , port)
+	}
+	
+	runtime.GOMAXPROCS(runtime.NumCPU()-1)
+	openDB(level_data)
+	
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		log.Println(http.ListenAndServe(server + ":" + port, nil))
 	}()
-	listen()
+	listen(port)
 }
 
 func init() {
